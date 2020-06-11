@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+
+import paho.mqtt.client as mqtt
+import time
+import os
+import socket
+############
+#This script will subscribe to a MQTT topic "commands/clients" and listen to various commands that are published ther.
+
+
+
+host_name = socket.gethostname()
+host_ip = socket.gethostbyname(host_name)
+clientID = host_ip
+
+#shutdown client
+def shutdown():
+    print("starting shutdown...")
+    client.publish("commands/clients", "Roger, Shuting down {}".format(clientID))
+    time.sleep(10)
+    os.system('sudo shutdown now')
+    print("Shutdown")
+
+#check hostapd
+def check_status():
+    check = os.system("systemctl is-active --quiet hostapd")
+    print(check)
+    if check == 0:
+        msg = "Running!"
+    else:
+        msg = "Down!"
+    client.publish("commands/clients", "C:{}, CMD:status={}".format(clientID,msg))
+
+#stop hostapd
+def shutdown_wifi():
+    print("shutting down wifi")
+    shutdown = os.system("sudo systemctl stop hostapd")
+    client.publish("commands/clients", "C:{}, CMD:shutting down wifi".format(clientID))
+    check_status()
+
+#start hostapd
+def startup_wifi():
+    print("starting wifi")
+    startup = os.system("sudo systemctl start hostapd")
+    client.publish("commands/clients", "C:{}, CMD:starting wifi ".format(clientID))
+    check_status()
+
+#connect to the topic
+def on_connect(client, userdata, flags, rc):
+    print("Connected with result code "+str(rc))
+    client.subscribe("commands/clients")
+    client.publish("commands/clients", "O:{}".format(clientID))
+
+#Check for any messages that are published
+def on_message(client, userdata, message):
+    messageOUT = str(message.payload.decode("utf-8"))
+    if messageOUT == "stop rpi":
+        shutdown()
+    elif messageOUT == "status wifi":
+        check_status()
+    elif messageOUT == "stop wifi":
+        shutdown_wifi()
+    elif messageOUT == "start wifi":
+        startup_wifi()
+
+########################################
+broker_address="eyf-server"
+print("creating new instance")
+client = mqtt.Client(clientID)
+client.on_message=on_message
+client.on_connect=on_connect
+print("connecting to broker")
+client.connect(broker_address)
+client.loop_start()
+client.loop_forever()
